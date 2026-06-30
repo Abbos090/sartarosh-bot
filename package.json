@@ -1,0 +1,21 @@
+{
+  "name": "sartaroshxona-bot",
+  "version": "1.0.0",
+  "description": "Sartaroshxona uchun Telegram navbat boti",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "",
+  "license": "ISC"
+}

@@ -1,0 +1,19 @@
+{
+  "workStart": "18:00",
+  "workEnd": "00:00",
+  "defaultDuration": 30,
+  "services": [
+    {
+      "name": "Oddiy soch olish",
+      "duration": 30
+    },
+    {
+      "name": "Kalga olish",
+      "duration": 15
+    },
+    {
+      "name": "Soqol olish",
+      "duration": 10
+    }
+  ]
+}

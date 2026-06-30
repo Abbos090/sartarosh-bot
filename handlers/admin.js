@@ -1,0 +1,392 @@
+// =====================================================
+// handlers/admin.js — Admin panel va barcha sozlamalar
+// =====================================================
+
+const { STATES, CB, ADMIN_ID } = require('../constants');
+const {
+  readUsers,
+  readBookings,
+  deleteBooking,
+  deleteBookings,
+  addHoliday,
+  readHolidays,
+} = require('../utils/file');
+const {
+  getTodayBookings,
+  getAllBookingsSorted,
+  formatBooking,
+} = require('../utils/booking');
+const {
+  updateWorkHours,
+  addService,
+  removeService,
+  getServices,
+  getDefaultDuration,
+} = require('../utils/settings');
+const { getUpcomingDays, formatDateUz } = require('../utils/time');
+const { CB: c } = require('../constants');
+
+// ===================== ADMIN MENUSI =====================
+
+/**
+ * Admin menyusini ko'rsatish
+ * @param {object} bot
+ * @param {number} chatId
+ */
+async function showAdminMenu(bot, chatId) {
+  await bot.sendMessage(chatId,
+    '🛠 *Admin panel*\n\nNimani qilmoqchisiz?',
+    {
+      parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: '📅 Bugungi navbatlar', callback_data: CB.ADMIN_TODAY }],
+          [{ text: '📆 Barcha navbatlar',  callback_data: CB.ADMIN_ALL   }],
+          [{ text: '👥 Mijozlar',           callback_data: CB.ADMIN_USERS }],
+          [{ text: '⛔ Dam olish kuni',     callback_data: CB.ADMIN_HOLIDAY }],
+          [{ text: '⚙️ Ish vaqtini sozlash', callback_data: CB.ADMIN_WORK }],
+          [{ text: '✂️ Xizmatlarni sozlash', callback_data: CB.ADMIN_SERVICE }],
+          [{ text: '✅ Navbat bajarildi',   callback_data: CB.ADMIN_DONE }],
+          [{ text: '📢 Xabar yuborish',     callback_data: CB.ADMIN_BROADCAST }],
+        ],
+      },
+    }
+  );
+}
+
+// ===================== CALLBACK HANDLER =====================
+
+/**
+ * Admin callback so'rovlarini qayta ishlash
+ * @param {object} bot
+ * @param {object} query
+ * @param {object} stateMap
+ */
+async function handleAdminCallback(bot, query, stateMap) {
+  const chatId = query.message.chat.id;
+  const data   = query.data;
+  const sd     = stateMap[chatId] || {};
+
+  await bot.answerCallbackQuery(query.id);
+
+  // ---------- BUGUNGI NAVBATLAR ----------
+  if (data === CB.ADMIN_TODAY) {
+    const list = getTodayBookings();
+    if (!list.length) {
+      return bot.sendMessage(chatId, '📭 Bugun hech qanday navbat yo\'q.');
+    }
+    const text = list.map(b => formatBooking(b)).join('\n\n─────────────\n\n');
+    await bot.sendMessage(chatId, `📅 *Bugungi navbatlar (${list.length} ta):*\n\n${text}`, {
+      parse_mode: 'Markdown',
+    });
+    return;
+  }
+
+  // ---------- BARCHA NAVBATLAR ----------
+  if (data === CB.ADMIN_ALL) {
+    const list = getAllBookingsSorted();
+    if (!list.length) {
+      return bot.sendMessage(chatId, '📭 Hozircha hech qanday navbat yo\'q.');
+    }
+    const text = list.map(b => formatBooking(b)).join('\n\n─────────────\n\n');
+    await bot.sendMessage(chatId, `📆 *Barcha navbatlar (${list.length} ta):*\n\n${text}`, {
+      parse_mode: 'Markdown',
+    });
+    return;
+  }
+
+  // ---------- MIJOZLAR ----------
+  if (data === CB.ADMIN_USERS) {
+    const users = readUsers();
+    if (!users.length) {
+      return bot.sendMessage(chatId, '📭 Hozircha ro\'yxatdan o\'tgan foydalanuvchi yo\'q.');
+    }
+    const text = users.map((u, i) =>
+      `${i + 1}. 👤 *${u.fullname}*\n   📞 ${u.phone}`
+    ).join('\n\n');
+    await bot.sendMessage(chatId, `👥 *Mijozlar (${users.length} ta):*\n\n${text}`, {
+      parse_mode: 'Markdown',
+    });
+    return;
+  }
+
+  // ---------- DAM OLISH KUNI ----------
+  if (data === CB.ADMIN_HOLIDAY) {
+    const days = getUpcomingDays();
+    if (!days.length) {
+      return bot.sendMessage(chatId, '❌ Tanlash uchun kunlar mavjud emas.');
+    }
+    stateMap[chatId] = { ...sd, state: STATES.ADMIN_HOLIDAY_SELECT };
+    const keyboard = days.map(d => [
+      { text: formatDateUz(d), callback_data: CB.HOL_DAY + d }
+    ]);
+    await bot.sendMessage(chatId,
+      '⛔ Dam olish kuni sifatida qaysi kunni belgilash kerak?',
+      { reply_markup: { inline_keyboard: keyboard } }
+    );
+    return;
+  }
+
+  // Holiday kuni tanlash
+  if (data.startsWith(CB.HOL_DAY)) {
+    const dateStr    = data.slice(CB.HOL_DAY.length);
+    const bookings   = readBookings().filter(b => b.date === dateStr);
+
+    await addHoliday(dateStr);
+
+    // O'sha kundagi bronlarni topib xabar yuborish
+    for (const b of bookings) {
+      try {
+        await bot.sendMessage(b.chatId,
+          `ℹ️ Hurmatli *${b.fullname}*,\n\n` +
+          `Sartaroshxona *${dateStr}* kuni ishlamaydi.\n` +
+          `Navbatingiz (⏰ ${b.time}) bekor qilindi.\n\nUzr!`,
+          { parse_mode: 'Markdown' }
+        );
+      } catch (e) {
+        console.error(`Foydalanuvchiga xabar yuborishda xatolik (${b.chatId}):`, e.message);
+      }
+    }
+
+    if (bookings.length) {
+      await deleteBookings(bookings.map(b => b.bookingId));
+    }
+
+    stateMap[chatId] = { state: STATES.ADMIN_MENU };
+    await bot.sendMessage(chatId,
+      `✅ *${dateStr}* dam olish kuni sifatida belgilandi.\n` +
+      `❌ ${bookings.length} ta navbat bekor qilindi va foydalanuvchilarga xabar yuborildi.`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  // ---------- ISH VAQTINI SOZLASH ----------
+  if (data === CB.ADMIN_WORK) {
+    const s = require('../utils/file').readSettings();
+    stateMap[chatId] = { ...sd, state: STATES.ADMIN_WORK_START };
+    await bot.sendMessage(chatId,
+      `⚙️ *Ish vaqtini sozlash*\n\nHozirgi vaqt: ${s.workStart} — ${s.workEnd}\n\nYangi *boshlanish* vaqtini kiriting:\n_(Masalan: 09:00)_`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  // ---------- XIZMATLARNI SOZLASH ----------
+  if (data === CB.ADMIN_SERVICE) {
+    await sendServiceMenu(bot, chatId, stateMap, query.message.message_id);
+    return;
+  }
+
+  // Xizmat o'chirish
+  if (data.startsWith(CB.SVC_DEL)) {
+    const idx = parseInt(data.slice(CB.SVC_DEL.length), 10);
+    await removeService(idx);
+    await bot.sendMessage(chatId, '✅ Xizmat o\'chirildi.');
+    await sendServiceMenu(bot, chatId, stateMap);
+    return;
+  }
+
+  // Yangi xizmat qo'shish
+  if (data === CB.SVC_ADD) {
+    stateMap[chatId] = { ...sd, state: STATES.ADMIN_SERVICE_NAME };
+    await bot.sendMessage(chatId,
+      '✂️ Yangi xizmat nomini kiriting:\n_(Masalan: Soqol olish)_',
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  // ---------- NAVBAT BAJARILDI ----------
+  if (data === CB.ADMIN_DONE) {
+    const list = getAllBookingsSorted();
+    if (!list.length) {
+      return bot.sendMessage(chatId, '📭 Hozircha hech qanday navbat yo\'q.');
+    }
+    stateMap[chatId] = { ...sd, state: STATES.ADMIN_DONE_SELECT };
+    const keyboard = list.map(b => [
+      {
+        text: `#${b.bookingId} | ${b.date} ${b.time} — ${b.fullname}`,
+        callback_data: CB.DONE_BOOK + b.bookingId,
+      }
+    ]);
+    await bot.sendMessage(chatId,
+      '✅ Bajarilgan navbatni tanlang:',
+      { reply_markup: { inline_keyboard: keyboard } }
+    );
+    return;
+  }
+
+  // Navbat bajarildi — o'chirish
+  if (data.startsWith(CB.DONE_BOOK)) {
+    const bookingId = data.slice(CB.DONE_BOOK.length);
+    await deleteBooking(bookingId);
+    stateMap[chatId] = { state: STATES.ADMIN_MENU };
+    await bot.sendMessage(chatId, `✅ Navbat #${bookingId} bajarildi va o\'chirildi.`);
+    return;
+  }
+
+  // ---------- BROADCAST ----------
+  if (data === CB.ADMIN_BROADCAST) {
+    stateMap[chatId] = { state: STATES.ADMIN_BROADCAST };
+    await bot.sendMessage(chatId,
+      '📢 Barcha foydalanuvchilarga yuboriladigan xabarni kiriting:'
+    );
+    return;
+  }
+}
+
+// ===================== MATN HANDLER =====================
+
+/**
+ * Admin matn xabarlarini qayta ishlash (state machine)
+ * @param {object} bot
+ * @param {object} msg
+ * @param {object} stateMap
+ */
+async function handleAdminMessage(bot, msg, stateMap) {
+  const chatId = msg.chat.id;
+  const text   = msg.text?.trim() || '';
+  const sd     = stateMap[chatId] || {};
+
+  // ---------- ISH VAQTI: BOSHLANISH ----------
+  if (sd.state === STATES.ADMIN_WORK_START) {
+    if (!isValidTime(text)) {
+      return bot.sendMessage(chatId, '⚠️ Noto\'g\'ri format. Iltimos, HH:MM formatida kiriting (masalan: 09:00)');
+    }
+    stateMap[chatId] = { ...sd, state: STATES.ADMIN_WORK_END, workStart: text };
+    await bot.sendMessage(chatId,
+      `✅ Boshlanish: *${text}*\n\nEndi *tugash* vaqtini kiriting:\n_(Masalan: 22:00 yoki 00:00)_`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  // ---------- ISH VAQTI: TUGASH ----------
+  if (sd.state === STATES.ADMIN_WORK_END) {
+    if (!isValidTime(text)) {
+      return bot.sendMessage(chatId, '⚠️ Noto\'g\'ri format. Iltimos, HH:MM formatida kiriting.');
+    }
+    await updateWorkHours(sd.workStart, text);
+    stateMap[chatId] = { state: STATES.ADMIN_MENU };
+    await bot.sendMessage(chatId,
+      `✅ Ish vaqti yangilandi:\n⏰ *${sd.workStart}* — *${text}*`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  // ---------- XIZMAT NOMI ----------
+  if (sd.state === STATES.ADMIN_SERVICE_NAME) {
+    stateMap[chatId] = { ...sd, state: STATES.ADMIN_SERVICE_DUR, serviceName: text };
+    await bot.sendMessage(chatId,
+      `✅ Nom: *${text}*\n\nDavomiyligini daqiqada kiriting:\n_(Masalan: 30)_`,
+      { parse_mode: 'Markdown' }
+    );
+    return;
+  }
+
+  // ---------- XIZMAT DAVOMIYLIGI ----------
+  if (sd.state === STATES.ADMIN_SERVICE_DUR) {
+    const dur = parseInt(text, 10);
+    if (isNaN(dur) || dur <= 0) {
+      return bot.sendMessage(chatId, '⚠️ Iltimos, to\'g\'ri daqiqa kiriting (masalan: 30)');
+    }
+    await addService(sd.serviceName, dur);
+    stateMap[chatId] = { state: STATES.ADMIN_MENU };
+    await bot.sendMessage(chatId,
+      `✅ Yangi xizmat qo'shildi:\n✂️ *${sd.serviceName}* — ${dur} daqiqa`,
+      { parse_mode: 'Markdown' }
+    );
+    await sendServiceMenu(bot, chatId, stateMap);
+    return;
+  }
+
+  // ---------- BROADCAST ----------
+  if (sd.state === STATES.ADMIN_BROADCAST) {
+    const users    = readUsers();
+    let success    = 0;
+    let failed     = 0;
+
+    for (const u of users) {
+      try {
+        await bot.sendMessage(u.chatId, `📢 *Sartaroshxona:*\n\n${text}`, { parse_mode: 'Markdown' });
+        success++;
+      } catch (e) {
+        failed++;
+      }
+    }
+
+    stateMap[chatId] = { state: STATES.ADMIN_MENU };
+    await bot.sendMessage(chatId,
+      `📢 Xabar yuborildi:\n✅ ${success} ta muvaffaqiyatli\n❌ ${failed} ta xatolik`
+    );
+    return;
+  }
+}
+
+// ===================== YORDAMCHI FUNKSIYALAR =====================
+
+/**
+ * Xizmatlar menyusini yuborish
+ * @param {object} bot
+ * @param {number} chatId
+ * @param {object} stateMap
+ * @param {number|null} messageId — edit qilish uchun (optional)
+ */
+async function sendServiceMenu(bot, chatId, stateMap, messageId = null) {
+  const services = getServices();
+  stateMap[chatId] = { state: STATES.ADMIN_SERVICE_MENU };
+
+  let text = '✂️ *Xizmatlar ro\'yxati:*\n\n';
+  const keyboard = [];
+
+  services.forEach((s, i) => {
+    text += `${i + 1}. ${s.name} — ${s.duration} daqiqa\n`;
+    keyboard.push([
+      { text: `🗑 ${s.name}`, callback_data: CB.SVC_DEL + i }
+    ]);
+  });
+
+  keyboard.push([{ text: '➕ Yangi xizmat qo\'shish', callback_data: CB.SVC_ADD }]);
+  text += '\nO\'chirish uchun xizmat tugmasini bosing:';
+
+  const opts = {
+    parse_mode:   'Markdown',
+    reply_markup: { inline_keyboard: keyboard },
+  };
+
+  if (messageId) {
+    await bot.editMessageText(text, { chat_id: chatId, message_id: messageId, ...opts });
+  } else {
+    await bot.sendMessage(chatId, text, opts);
+  }
+}
+
+/**
+ * Vaqt formatini tekshirish — HH:MM
+ * @param {string} str
+ * @returns {boolean}
+ */
+function isValidTime(str) {
+  return /^\d{2}:\d{2}$/.test(str);
+}
+
+/**
+ * Admin /start buyrug'ini qayta ishlash
+ * @param {object} bot
+ * @param {object} msg
+ * @param {object} stateMap
+ */
+async function handleAdminStart(bot, msg, stateMap) {
+  const chatId = msg.chat.id;
+  stateMap[chatId] = { state: STATES.ADMIN_MENU };
+  await showAdminMenu(bot, chatId);
+}
+
+module.exports = {
+  handleAdminStart,
+  handleAdminCallback,
+  handleAdminMessage,
+  showAdminMenu,
+};
