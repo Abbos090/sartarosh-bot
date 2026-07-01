@@ -67,6 +67,12 @@ bot.on('message', async (msg) => {
     const chatId = msg.chat.id;
 
     if (isAdmin(chatId)) {
+      if ((msg.text || '').trim().toLowerCase() === 'menyu') {
+        stateMap[chatId] = { state: STATES.ADMIN_MENU };
+        await adminHandler.showAdminMenu(bot, chatId);
+        return;
+      }
+
       const sd = stateMap[chatId] || {};
       // Admin faqat ma'lum statelarda matn yuboradi
       const adminTextStates = [

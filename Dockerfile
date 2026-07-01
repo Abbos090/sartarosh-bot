@@ -1,39 +1,17 @@
-# syntax = docker/dockerfile:1
+# Node.js versiyasini tanlaymiz
+FROM node:18-alpine
 
-# Adjust NODE_VERSION as desired
-ARG NODE_VERSION=22.21.1
-FROM node:${NODE_VERSION}-slim AS base
-
-LABEL fly_launch_runtime="Node.js"
-
-# Node.js app lives here
+# Ishchi katalogni belgilaymiz
 WORKDIR /app
 
-# Set production environment
-ENV NODE_ENV="production"
+# Package fayllarini ko'chirib o'tkazamiz
+COPY package*.json ./
 
+# Kutubxonalarni o'rnatamiz
+RUN npm install --production
 
-# Throw-away build stage to reduce size of final image
-FROM base AS build
-
-# Install packages needed to build node modules
-RUN apt-get update -qq && \
-    apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
-
-# Install node modules
-COPY package-lock.json package.json ./
-RUN npm ci
-
-# Copy application code
+# Qolgan barcha kodlarni ko'chiramiz
 COPY . .
 
-
-# Final stage for app image
-FROM base
-
-# Copy built application
-COPY --from=build /app /app
-
-# Start the server by default, this can be overwritten at runtime
-EXPOSE 3000
-CMD [ "npm", "run", "start" ]
+# Botni ishga tushirish buyrug'i
+CMD [ "npm", "start" ]

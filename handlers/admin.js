@@ -54,6 +54,15 @@ async function showAdminMenu(bot, chatId) {
   );
 }
 
+async function showAdminKeyboard(bot, chatId) {
+  await bot.sendMessage(chatId, 'Admin menyu tugmasi tayyor.', {
+    reply_markup: {
+      keyboard: [['menyu']],
+      resize_keyboard: true,
+    },
+  });
+}
+
 // ===================== CALLBACK HANDLER =====================
 
 /**
@@ -381,6 +390,7 @@ function isValidTime(str) {
 async function handleAdminStart(bot, msg, stateMap) {
   const chatId = msg.chat.id;
   stateMap[chatId] = { state: STATES.ADMIN_MENU };
+  await showAdminKeyboard(bot, chatId);
   await showAdminMenu(bot, chatId);
 }
 
