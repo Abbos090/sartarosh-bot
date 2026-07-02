@@ -4,7 +4,7 @@
 
 const TelegramBot = require('node-telegram-bot-api');
 const { ADMIN_ID, STATES } = require('./constants');
-const { findUser } = require('./utils/file');
+const { DB_PATH, ready: dbReady } = require('./utils/db');
 
 // Handlerlar
 const userHandler  = require('./handlers/user');
@@ -155,6 +155,13 @@ bot.on('error', (err) => {
 });
 
 // ===================== ISHGA TUSHISH =====================
+
+dbReady
+  .then(() => console.log(`SQLite baza tayyor: ${DB_PATH}`))
+  .catch((err) => {
+    console.error('SQLite bazani tayyorlashda xatolik:', err.message);
+    process.exit(1);
+  });
 
 console.log('✅ Sartaroshxona boti ishga tushdi!');
 console.log(`👑 Admin ID: ${ADMIN_ID}`);

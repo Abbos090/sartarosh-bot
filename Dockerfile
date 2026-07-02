@@ -1,5 +1,5 @@
 # Node.js versiyasini tanlaymiz
-FROM node:18-alpine
+FROM node:18-bookworm-slim
 
 # Ishchi katalogni belgilaymiz
 WORKDIR /app

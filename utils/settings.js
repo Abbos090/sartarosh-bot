@@ -10,7 +10,7 @@ const { readSettings, saveSettings } = require('./file');
  * @param {string} workEnd   — "HH:MM"
  */
 async function updateWorkHours(workStart, workEnd) {
-  const s = readSettings();
+  const s = await readSettings();
   s.workStart = workStart;
   s.workEnd   = workEnd;
   await saveSettings(s);
@@ -22,7 +22,7 @@ async function updateWorkHours(workStart, workEnd) {
  * @param {number} duration
  */
 async function addService(name, duration) {
-  const s = readSettings();
+  const s = await readSettings();
   s.services.push({ name, duration: Number(duration) });
   await saveSettings(s);
 }
@@ -32,7 +32,7 @@ async function addService(name, duration) {
  * @param {number} index
  */
 async function removeService(index) {
-  const s = readSettings();
+  const s = await readSettings();
   s.services.splice(index, 1);
   await saveSettings(s);
 }
@@ -41,16 +41,16 @@ async function removeService(index) {
  * Barcha xizmatlarni qaytarish
  * @returns {{ name: string, duration: number }[]}
  */
-function getServices() {
-  return readSettings().services;
+async function getServices() {
+  return (await readSettings()).services;
 }
 
 /**
  * Default duration olish
  * @returns {number}
  */
-function getDefaultDuration() {
-  return readSettings().defaultDuration;
+async function getDefaultDuration() {
+  return (await readSettings()).defaultDuration;
 }
 
 module.exports = {

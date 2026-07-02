@@ -3,7 +3,7 @@
 // =====================================================
 
 const { STATES, CB, ADMIN_ID, CANCEL_NOTIFY_MINUTES } = require('../constants');
-const { findUser, saveUser, saveBooking, deleteBooking, generateBookingId } = require('../utils/file');
+const { findUser, saveUser, saveBooking, deleteBooking } = require('../utils/file');
 const { getActiveBooking, isSlotAvailable, formatBooking } = require('../utils/booking');
 const { buildDayKeyboard, buildTimeKeyboard, buildServiceKeyboard } = require('../utils/calendar');
 const { getServices, getDefaultDuration } = require('../utils/settings');
@@ -54,7 +54,7 @@ async function startRegistration(bot, chatId, stateMap) {
  */
 async function handleStart(bot, msg, stateMap) {
   const chatId = msg.chat.id;
-  const user   = findUser(chatId);
+  const user   = await findUser(chatId);
 
   if (user) {
     stateMap[chatId] = { state: STATES.IDLE };
@@ -148,7 +148,7 @@ async function handleContact(bot, msg, stateMap) {
  */
 async function handleBookingStart(bot, chatId, stateMap) {
   // Aktiv bronni tekshirish
-  const active = getActiveBooking(chatId);
+  const active = await getActiveBooking(chatId);
   if (active) {
     return bot.sendMessage(chatId,
       `⚠️ Sizda allaqachon aktiv navbat mavjud:\n\n${formatBooking(active)}\n\nYangi navbat olish uchun avval mavjud navbatingizni bekor qiling.`,
@@ -157,7 +157,7 @@ async function handleBookingStart(bot, chatId, stateMap) {
   }
 
   // Xizmat tanlash
-  const services = getServices();
+  const services = await getServices();
   const keyboard = buildServiceKeyboard(services);
 
   stateMap[chatId] = { state: STATES.SELECT_SERVICE };
@@ -171,7 +171,7 @@ async function handleBookingStart(bot, chatId, stateMap) {
  * Navbatni bekor qilishni boshlash
  */
 async function handleCancelStart(bot, chatId, stateMap) {
-  const booking = getActiveBooking(chatId);
+  const booking = await getActiveBooking(chatId);
   if (!booking) {
     return bot.sendMessage(chatId, '📭 Sizda aktiv navbat mavjud emas.');
   }
@@ -207,22 +207,22 @@ async function handleCallback(bot, query, stateMap) {
   // --- XIZMAT TANLASH ---
   if (data.startsWith(CB.SERVICE)) {
     const val      = data.slice(CB.SERVICE.length);
-    const services = getServices();
+    const services = await getServices();
     let service, duration;
 
     if (val === 'skip') {
       service  = null;
-      duration = getDefaultDuration();
+      duration = await getDefaultDuration();
     } else {
       const idx = parseInt(val, 10);
       service   = services[idx]?.name || null;
-      duration  = services[idx]?.duration || getDefaultDuration();
+      duration  = services[idx]?.duration || (await getDefaultDuration());
     }
 
     stateMap[chatId] = { state: STATES.SELECT_DAY, service, duration };
 
     // Kun tanlash
-    const keyboard = buildDayKeyboard();
+    const keyboard = await buildDayKeyboard();
     if (!keyboard) {
       return bot.sendMessage(chatId,
         '😔 Hozircha barcha kunlar dam olish kuni.\n\nKeyinroq urinib ko\'ring.'
@@ -240,7 +240,7 @@ async function handleCallback(bot, query, stateMap) {
   // --- KUN TANLASH ---
   if (data.startsWith(CB.DAY) && sd.state === STATES.SELECT_DAY) {
     const dateStr = data.slice(CB.DAY.length);
-    const slots   = require('../utils/booking').getAvailableSlots(dateStr, sd.duration);
+    const slots   = await require('../utils/booking').getAvailableSlots(dateStr, sd.duration);
 
     if (!slots.length) {
       return bot.editMessageText(
@@ -292,7 +292,7 @@ async function handleCallback(bot, query, stateMap) {
   // --- BRON TASDIQLASH ---
   if (data === CB.CONFIRM_YES && sd.state === STATES.CONFIRM_BOOKING) {
     // Oxirgi tekshiruv — ikki user bir vaqtda bosishi holati
-    const still = isSlotAvailable(sd.date, sd.time, sd.duration);
+    const still = await isSlotAvailable(sd.date, sd.time, sd.duration);
     if (!still) {
       stateMap[chatId] = { state: STATES.IDLE };
       await bot.editMessageText(
@@ -303,12 +303,10 @@ async function handleCallback(bot, query, stateMap) {
       return;
     }
 
-    const user       = findUser(chatId);
-    const bookingId  = generateBookingId();
-    const svcName    = sd.service || 'Standart';
+    const user    = await findUser(chatId);
+    const svcName = sd.service || 'Standart';
 
-    await saveBooking({
-      bookingId,
+    const bookingId = await saveBooking({
       chatId:   String(chatId),
       fullname: user?.fullname || 'Noma\'lum',
       phone:    user?.phone    || '—',
@@ -343,7 +341,7 @@ async function handleCallback(bot, query, stateMap) {
   // --- BEKOR QILISHNI TASDIQLASH ---
   if (data === CB.CANCEL_YES && sd.state === STATES.CANCEL_CONFIRM) {
     const bookingId = sd.bookingId;
-    const bookings  = require('../utils/file').readBookings();
+    const bookings  = await require('../utils/file').readBookings();
     const booking   = bookings.find(b => b.bookingId === String(bookingId));
 
     if (booking) {

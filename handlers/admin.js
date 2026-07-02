@@ -80,7 +80,7 @@ async function handleAdminCallback(bot, query, stateMap) {
 
   // ---------- BUGUNGI NAVBATLAR ----------
   if (data === CB.ADMIN_TODAY) {
-    const list = getTodayBookings();
+    const list = await getTodayBookings();
     if (!list.length) {
       return bot.sendMessage(chatId, '📭 Bugun hech qanday navbat yo\'q.');
     }
@@ -93,7 +93,7 @@ async function handleAdminCallback(bot, query, stateMap) {
 
   // ---------- BARCHA NAVBATLAR ----------
   if (data === CB.ADMIN_ALL) {
-    const list = getAllBookingsSorted();
+    const list = await getAllBookingsSorted();
     if (!list.length) {
       return bot.sendMessage(chatId, '📭 Hozircha hech qanday navbat yo\'q.');
     }
@@ -106,7 +106,7 @@ async function handleAdminCallback(bot, query, stateMap) {
 
   // ---------- MIJOZLAR ----------
   if (data === CB.ADMIN_USERS) {
-    const users = readUsers();
+    const users = await readUsers();
     if (!users.length) {
       return bot.sendMessage(chatId, '📭 Hozircha ro\'yxatdan o\'tgan foydalanuvchi yo\'q.');
     }
@@ -139,7 +139,7 @@ async function handleAdminCallback(bot, query, stateMap) {
   // Holiday kuni tanlash
   if (data.startsWith(CB.HOL_DAY)) {
     const dateStr    = data.slice(CB.HOL_DAY.length);
-    const bookings   = readBookings().filter(b => b.date === dateStr);
+    const bookings   = (await readBookings()).filter(b => b.date === dateStr);
 
     await addHoliday(dateStr);
 
@@ -172,7 +172,7 @@ async function handleAdminCallback(bot, query, stateMap) {
 
   // ---------- ISH VAQTINI SOZLASH ----------
   if (data === CB.ADMIN_WORK) {
-    const s = require('../utils/file').readSettings();
+    const s = await require('../utils/file').readSettings();
     stateMap[chatId] = { ...sd, state: STATES.ADMIN_WORK_START };
     await bot.sendMessage(chatId,
       `⚙️ *Ish vaqtini sozlash*\n\nHozirgi vaqt: ${s.workStart} — ${s.workEnd}\n\nYangi *boshlanish* vaqtini kiriting:\n_(Masalan: 09:00)_`,
@@ -208,7 +208,7 @@ async function handleAdminCallback(bot, query, stateMap) {
 
   // ---------- NAVBAT BAJARILDI ----------
   if (data === CB.ADMIN_DONE) {
-    const list = getAllBookingsSorted();
+    const list = await getAllBookingsSorted();
     if (!list.length) {
       return bot.sendMessage(chatId, '📭 Hozircha hech qanday navbat yo\'q.');
     }
@@ -313,7 +313,7 @@ async function handleAdminMessage(bot, msg, stateMap) {
 
   // ---------- BROADCAST ----------
   if (sd.state === STATES.ADMIN_BROADCAST) {
-    const users    = readUsers();
+    const users    = await readUsers();
     let success    = 0;
     let failed     = 0;
 
@@ -344,7 +344,7 @@ async function handleAdminMessage(bot, msg, stateMap) {
  * @param {number|null} messageId — edit qilish uchun (optional)
  */
 async function sendServiceMenu(bot, chatId, stateMap, messageId = null) {
-  const services = getServices();
+  const services = await getServices();
   stateMap[chatId] = { state: STATES.ADMIN_SERVICE_MENU };
 
   let text = '✂️ *Xizmatlar ro\'yxati:*\n\n';

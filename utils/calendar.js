@@ -10,8 +10,8 @@ const { CB } = require('../constants');
  * Keyingi 3 kunni qaytarish (holidaylar olib tashlangan)
  * @returns {string[]} — mavjud kunlar YYYY-MM-DD massiv
  */
-function getAvailableDays() {
-  const holidays  = readHolidays();
+async function getAvailableDays() {
+  const holidays  = await readHolidays();
   const upcoming  = getUpcomingDays();
   return upcoming.filter(d => !holidays.includes(d));
 }
@@ -20,8 +20,8 @@ function getAvailableDays() {
  * Kun tanlash inline keyboard yaratish
  * @returns {object[][]|null} — InlineKeyboard yoki null (hech kun yo'q)
  */
-function buildDayKeyboard() {
-  const days = getAvailableDays();
+async function buildDayKeyboard() {
+  const days = await getAvailableDays();
   if (!days.length) return null;
 
   return days.map(d => [

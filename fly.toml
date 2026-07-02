@@ -6,3 +6,8 @@ primary_region = "ams"
 
 [build]
   # Agar Dockerfile bo'lsa Fly o'zi topadi, bo'lmasa o'zi quradi
+
+
+[[mounts]]
+  source = "bot_data"
+  destination = "/data"

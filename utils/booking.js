@@ -31,10 +31,10 @@ function overlaps(aStart, aEnd, bStart, bEnd) {
  * @param {number} duration  — daqiqalarda
  * @returns {string[]}       — bo'sh vaqtlar ["18:00", "18:30", ...]
  */
-function getAvailableSlots(dateStr, duration) {
-  const settings = readSettings();
+async function getAvailableSlots(dateStr, duration) {
+  const settings = await readSettings();
   const allSlots = generateTimeSlots(settings.workStart, settings.workEnd);
-  const bookings = readBookings().filter(b => b.date === dateStr);
+  const bookings = (await readBookings()).filter(b => b.date === dateStr);
 
   // Bugungi kun uchun o'tgan vaqtlarni filterlash
   let minMinutes = 0;
@@ -76,8 +76,8 @@ function getAvailableSlots(dateStr, duration) {
  * @param {number} duration
  * @returns {boolean}
  */
-function isSlotAvailable(dateStr, timeStr, duration) {
-  const available = getAvailableSlots(dateStr, duration);
+async function isSlotAvailable(dateStr, timeStr, duration) {
+  const available = await getAvailableSlots(dateStr, duration);
   return available.includes(timeStr);
 }
 
@@ -86,9 +86,9 @@ function isSlotAvailable(dateStr, timeStr, duration) {
  * @param {string|number} chatId
  * @returns {object|null}
  */
-function getActiveBooking(chatId) {
+async function getActiveBooking(chatId) {
   const now     = new Date();
-  const bookings = readBookings().filter(b => b.chatId === String(chatId));
+  const bookings = (await readBookings()).filter(b => b.chatId === String(chatId));
 
   for (const b of bookings) {
     const bookingEnd = new Date(`${b.date}T${b.time}:00`);
@@ -102,9 +102,9 @@ function getActiveBooking(chatId) {
  * Bugungi navbatlarni vaqt bo'yicha tartiblangan holda qaytarish
  * @returns {object[]}
  */
-function getTodayBookings() {
+async function getTodayBookings() {
   const today = todayStr();
-  return readBookings()
+  return (await readBookings())
     .filter(b => b.date === today)
     .sort((a, b) => a.time.localeCompare(b.time));
 }
@@ -113,8 +113,8 @@ function getTodayBookings() {
  * Barcha navbatlarni sana keyin vaqt bo'yicha tartiblash
  * @returns {object[]}
  */
-function getAllBookingsSorted() {
-  return readBookings().sort((a, b) => {
+async function getAllBookingsSorted() {
+  return (await readBookings()).sort((a, b) => {
     const d = a.date.localeCompare(b.date);
     return d !== 0 ? d : a.time.localeCompare(b.time);
   });

@@ -1,129 +1,61 @@
 // =====================================================
-// utils/file.js — Fayl o'qish/yozish va lock mexanizmi
+// utils/file.js - Ma'lumotlarni SQLite orqali o'qish/yozish
 // =====================================================
 
-const fs   = require('fs');
-const path = require('path');
-const { PATHS } = require('../constants');
+const { DEFAULT_SETTINGS } = require('../constants');
+const db = require('./db');
 
-// Oddiy in-memory lock (process ichida)
-const locks = {};
-
-/**
- * Fayl lock olish — boshqa yozuv kutadi
- * @param {string} filePath
- * @returns {Promise<Function>} — unlock funksiyasi
- */
-async function acquireLock(filePath) {
-  while (locks[filePath]) {
-    await new Promise(r => setTimeout(r, 20));
-  }
-  locks[filePath] = true;
-  return () => { delete locks[filePath]; };
-}
-
-/**
- * Fayl mavjudligini tekshirish, yo'q bo'lsa yaratish
- * @param {string} filePath
- * @param {string} defaultContent
- */
-function ensureFile(filePath, defaultContent = '') {
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(filePath)) fs.writeFileSync(filePath, defaultContent, 'utf8');
-}
-
-/**
- * Fayl satrlarini o'qish (bo'sh satrlar o'tkazib yuboriladi)
- * @param {string} filePath
- * @returns {string[]}
- */
-function readLines(filePath) {
-  ensureFile(filePath);
-  const content = fs.readFileSync(filePath, 'utf8');
-  return content.split('\n').map(l => l.trim()).filter(Boolean);
-}
-
-/**
- * Fayl satrlarini yozish (lock bilan)
- * @param {string} filePath
- * @param {string[]} lines
- */
-async function writeLines(filePath, lines) {
-  const unlock = await acquireLock(filePath);
+function parseBooking(row) {
+  let details = {};
   try {
-    ensureFile(filePath);
-    fs.writeFileSync(filePath, lines.join('\n') + (lines.length ? '\n' : ''), 'utf8');
-  } finally {
-    unlock();
-  }
-}
-
-/**
- * Faylga bir satr qo'shish (lock bilan)
- * @param {string} filePath
- * @param {string} line
- */
-async function appendLine(filePath, line) {
-  const unlock = await acquireLock(filePath);
-  try {
-    ensureFile(filePath);
-    fs.appendFileSync(filePath, line + '\n', 'utf8');
-  } finally {
-    unlock();
-  }
-}
-
-/**
- * JSON faylini o'qish
- * @param {string} filePath
- * @param {object} defaultVal
- * @returns {object}
- */
-function readJSON(filePath, defaultVal = {}) {
-  ensureFile(filePath, JSON.stringify(defaultVal, null, 2));
-  try {
-    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    details = row.details ? JSON.parse(row.details) : {};
   } catch {
-    return defaultVal;
+    details = {};
   }
-}
 
-/**
- * JSON faylini yozish (lock bilan)
- * @param {string} filePath
- * @param {object} data
- */
-async function writeJSON(filePath, data) {
-  const unlock = await acquireLock(filePath);
-  try {
-    ensureFile(filePath);
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
-  } finally {
-    unlock();
-  }
+  return {
+    bookingId: String(row.id),
+    chatId: String(row.user_id),
+    fullname: details.fullname || '',
+    phone: details.phone || '',
+    date: details.date || '',
+    time: details.time || '',
+    service: details.service || '',
+    duration: Number(details.duration) || DEFAULT_SETTINGS.defaultDuration,
+  };
 }
 
 // -------- USERS --------
 
 /**
  * Barcha foydalanuvchilarni o'qish
- * @returns {{ chatId, fullname, phone }[]}
+ * @returns {Promise<{ chatId, fullname, phone }[]>}
  */
-function readUsers() {
-  return readLines(PATHS.USERS).map(line => {
-    const [chatId, fullname, phone] = line.split('|');
-    return { chatId, fullname, phone };
-  });
+async function readUsers() {
+  const rows = await db.all('SELECT user_id, full_name, contact FROM users ORDER BY user_id');
+  return rows.map(row => ({
+    chatId: String(row.user_id),
+    fullname: row.full_name || '',
+    phone: row.contact || '',
+  }));
 }
 
 /**
  * ID bo'yicha foydalanuvchi topish
  * @param {string|number} chatId
- * @returns {object|null}
+ * @returns {Promise<object|null>}
  */
-function findUser(chatId) {
-  return readUsers().find(u => u.chatId === String(chatId)) || null;
+async function findUser(chatId) {
+  const row = await db.get(
+    'SELECT user_id, full_name, contact FROM users WHERE user_id = ?',
+    [Number(chatId)]
+  );
+  if (!row) return null;
+  return {
+    chatId: String(row.user_id),
+    fullname: row.full_name || '',
+    phone: row.contact || '',
+  };
 }
 
 /**
@@ -133,20 +65,25 @@ function findUser(chatId) {
  * @param {string} phone
  */
 async function saveUser(chatId, fullname, phone) {
-  await appendLine(PATHS.USERS, `${chatId}|${fullname}|${phone}`);
+  await db.run(
+    `INSERT INTO users (user_id, full_name, contact)
+     VALUES (?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET
+       full_name = excluded.full_name,
+       contact = excluded.contact`,
+    [Number(chatId), fullname, phone]
+  );
 }
 
 // -------- BOOKINGS --------
 
 /**
  * Barcha bronlarni o'qish
- * @returns {object[]}
+ * @returns {Promise<object[]>}
  */
-function readBookings() {
-  return readLines(PATHS.BOOKINGS).map(line => {
-    const [bookingId, chatId, fullname, phone, date, time, service, duration] = line.split('|');
-    return { bookingId, chatId, fullname, phone, date, time, service, duration: Number(duration) };
-  });
+async function readBookings() {
+  const rows = await db.all('SELECT id, user_id, details FROM bookings ORDER BY id');
+  return rows.map(parseBooking);
 }
 
 /**
@@ -155,18 +92,30 @@ function readBookings() {
  */
 async function saveBooking(booking) {
   const { bookingId, chatId, fullname, phone, date, time, service, duration } = booking;
-  await appendLine(PATHS.BOOKINGS, `${bookingId}|${chatId}|${fullname}|${phone}|${date}|${time}|${service}|${duration}`);
+  const details = JSON.stringify({ fullname, phone, date, time, service, duration: Number(duration) });
+
+  if (bookingId) {
+    await db.run(
+      'INSERT INTO bookings (id, user_id, details) VALUES (?, ?, ?)',
+      [Number(bookingId), Number(chatId), details]
+    );
+    return String(bookingId);
+  }
+
+  const result = await db.run(
+    'INSERT INTO bookings (user_id, details) VALUES (?, ?)',
+    [Number(chatId), details]
+  );
+  return String(result.lastID);
 }
 
 /**
  * Bron ID generatsiya qilish
- * @returns {string}
+ * @returns {Promise<string>}
  */
-function generateBookingId() {
-  const all = readBookings();
-  if (!all.length) return '1';
-  const maxId = Math.max(...all.map(b => Number(b.bookingId) || 0));
-  return String(maxId + 1);
+async function generateBookingId() {
+  const row = await db.get('SELECT COALESCE(MAX(id), 0) + 1 AS nextId FROM bookings');
+  return String(row.nextId);
 }
 
 /**
@@ -174,10 +123,7 @@ function generateBookingId() {
  * @param {string} bookingId
  */
 async function deleteBooking(bookingId) {
-  const all = readBookings().filter(b => b.bookingId !== String(bookingId));
-  await writeLines(PATHS.BOOKINGS, all.map(b =>
-    `${b.bookingId}|${b.chatId}|${b.fullname}|${b.phone}|${b.date}|${b.time}|${b.service}|${b.duration}`
-  ));
+  await db.run('DELETE FROM bookings WHERE id = ?', [Number(bookingId)]);
 }
 
 /**
@@ -185,22 +131,32 @@ async function deleteBooking(bookingId) {
  * @param {string[]} ids
  */
 async function deleteBookings(ids) {
-  const set = new Set(ids.map(String));
-  const all = readBookings().filter(b => !set.has(b.bookingId));
-  await writeLines(PATHS.BOOKINGS, all.map(b =>
-    `${b.bookingId}|${b.chatId}|${b.fullname}|${b.phone}|${b.date}|${b.time}|${b.service}|${b.duration}`
-  ));
+  const cleanIds = ids.map(Number).filter(Number.isFinite);
+  if (!cleanIds.length) return;
+
+  const placeholders = cleanIds.map(() => '?').join(',');
+  await db.run(`DELETE FROM bookings WHERE id IN (${placeholders})`, cleanIds);
 }
 
 // -------- SETTINGS --------
 
 /**
  * Sozlamalarni o'qish
- * @returns {object}
+ * @returns {Promise<object>}
  */
-function readSettings() {
-  const { DEFAULT_SETTINGS } = require('../constants');
-  return readJSON(PATHS.SETTINGS, DEFAULT_SETTINGS);
+async function readSettings() {
+  const rows = await db.all('SELECT key, value FROM settings');
+  const settings = { ...DEFAULT_SETTINGS };
+
+  for (const row of rows) {
+    try {
+      settings[row.key] = JSON.parse(row.value);
+    } catch {
+      settings[row.key] = row.value;
+    }
+  }
+
+  return settings;
 }
 
 /**
@@ -208,28 +164,38 @@ function readSettings() {
  * @param {object} settings
  */
 async function saveSettings(settings) {
-  await writeJSON(PATHS.SETTINGS, settings);
+  const merged = { ...DEFAULT_SETTINGS, ...settings };
+
+  for (const [key, value] of Object.entries(merged)) {
+    await db.run(
+      `INSERT INTO settings (key, value)
+       VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [key, JSON.stringify(value)]
+    );
+  }
 }
 
 // -------- HOLIDAYS --------
 
 /**
  * Dam olish kunlarini o'qish
- * @returns {string[]}
+ * @returns {Promise<string[]>}
  */
-function readHolidays() {
-  return readLines(PATHS.HOLIDAYS);
+async function readHolidays() {
+  const rows = await db.all('SELECT holiday_date FROM holidays ORDER BY holiday_date');
+  return rows.map(row => row.holiday_date);
 }
 
 /**
  * Dam olish kuni qo'shish
- * @param {string} dateStr — YYYY-MM-DD
+ * @param {string} dateStr - YYYY-MM-DD
  */
 async function addHoliday(dateStr) {
-  const existing = readHolidays();
-  if (!existing.includes(dateStr)) {
-    await appendLine(PATHS.HOLIDAYS, dateStr);
-  }
+  await db.run(
+    'INSERT OR IGNORE INTO holidays (holiday_date) VALUES (?)',
+    [dateStr]
+  );
 }
 
 /**
@@ -237,8 +203,7 @@ async function addHoliday(dateStr) {
  * @param {string} dateStr
  */
 async function removeHoliday(dateStr) {
-  const all = readHolidays().filter(d => d !== dateStr);
-  await writeLines(PATHS.HOLIDAYS, all);
+  await db.run('DELETE FROM holidays WHERE holiday_date = ?', [dateStr]);
 }
 
 module.exports = {
