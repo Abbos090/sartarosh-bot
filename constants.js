@@ -71,6 +71,7 @@ const CB = {
   SVC_DEL:      'SVC_DEL:',
   SVC_ADD:      'SVC_ADD',
   HOL_DAY:      'HOL_DAY:',
+  USER_BACK:    'USER_BACK',
 };
 
 // Ish vaqti intervali (daqiqa)

@@ -4,6 +4,16 @@
 
 const { TIME_INTERVAL_MINUTES, DAYS_AHEAD } = require('../constants');
 
+const BOT_TIME_ZONE = process.env.BOT_TIME_ZONE || 'Asia/Tashkent';
+process.env.TZ = process.env.TZ || BOT_TIME_ZONE;
+
+function formatLocalDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * "HH:MM" formatidagi vaqtni daqiqaga aylantirish
  * @param {string} timeStr
@@ -58,7 +68,7 @@ function roundUpToNextInterval(nowMinutes) {
  * @returns {string}
  */
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalDate(new Date());
 }
 
 /**
@@ -69,7 +79,7 @@ function todayStr() {
 function dateOffset(daysOffset) {
   const d = new Date();
   d.setDate(d.getDate() + daysOffset);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(d);
 }
 
 /**
@@ -127,4 +137,5 @@ module.exports = {
   formatDateUz,
   nowMinutes,
   minutesUntil,
+  BOT_TIME_ZONE,
 };
