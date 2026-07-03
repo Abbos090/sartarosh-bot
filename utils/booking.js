@@ -128,7 +128,7 @@ async function getAllBookingsSorted() {
 function formatBooking(b) {
   return (
     `👤 *${b.fullname}*\n` +
-    `📞 ${b.phone}\n` +
+    `📞 [+${b.phone}](tel:+${b.phone})\n` +
     `📅 ${b.date} — ⏰ ${b.time}\n` +
     `✂️ ${b.service} (${b.duration} daq)\n` +
     `🆔 Bron #${b.bookingId}`
