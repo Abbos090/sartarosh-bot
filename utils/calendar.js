@@ -27,7 +27,6 @@ async function buildDayKeyboard() {
   const rows = days.map(d => [
     { text: formatDateUz(d), callback_data: CB.DAY + d }
   ]);
-  rows.push([{ text: 'Orqaga', callback_data: CB.USER_BACK }]);
   return rows;
 }
 
@@ -47,7 +46,6 @@ function buildTimeKeyboard(slots) {
       }))
     );
   }
-  rows.push([{ text: 'Orqaga', callback_data: CB.USER_BACK }]);
   return rows;
 }
 

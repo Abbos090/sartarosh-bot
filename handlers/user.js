@@ -401,6 +401,21 @@ async function handleCallback(bot, query, stateMap) {
     });
 
     stateMap[chatId] = { state: STATES.IDLE };
+    try {
+      await bot.sendMessage(
+        ADMIN_ID,
+        `🔔 *Yangi navbat olindi!*\n\n` +
+          `👤 ${user?.fullname || "Noma'lum"}\n` +
+          `📞 [+${user?.phone}](tel:+${user?.phone})\n` +
+          `✂️ ${svcName}\n` +
+          `📅 ${sd.date} — ⏰ ${sd.time}\n` +
+          `🕐 Davomiyligi: ${sd.duration} daqiqa\n` +
+          `🆔 Bron #${bookingId}`,
+        { parse_mode: "Markdown" },
+      );
+    } catch (e) {
+      console.error("Admin ga xabar yuborishda xatolik:", e.message);
+    }
     await bot.editMessageText(
       `✅ *Navbatingiz qabul qilindi!*\n\n` +
         `✂️ ${svcName}\n📅 ${sd.date} — ⏰ ${sd.time}\n🕐 ${sd.duration} daqiqa\n🆔 Bron #${bookingId}`,
@@ -436,7 +451,7 @@ async function handleCallback(bot, query, stateMap) {
           await bot.sendMessage(
             ADMIN_ID,
             `⚠️ *So'nggi daqiqada bekor qilish!*\n\n` +
-              `👤 ${booking.fullname}\n📞 ${booking.phone}\n📅 ${booking.date}\n⏰ ${booking.time}\n✂️ ${booking.service}`,
+              `👤 ${booking.fullname}\n📞 [+${booking.phone}](tel:+${booking.phone})\n📅 ${booking.date}\n⏰ ${booking.time}\n✂️ ${booking.service}`,
             { parse_mode: "Markdown" },
           );
         } catch (e) {
