@@ -5,7 +5,7 @@
 const path = require("path");
 
 // Admin Telegram ID si - o'zgartiring!
-const ADMIN_ID = 5186530716;
+const ADMIN_ID = 6878633471;
 
 // Fayl yo'llari
 const PATHS = {
